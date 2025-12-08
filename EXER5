@@ -1,0 +1,465 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.util.Random;
+import javax.swing.border.Border;
+
+/**
+ * ArithmeticGame.java
+ * * The main class that sets up the GUI using Java Swing, manages the game state,
+ * and handles user interaction (OOP implementation using composition, inheritance,
+ * and event handling).
+ */
+// --- Supporting types (package-private) ---
+
+enum GameLevel {
+    LEVEL1(1, 100),
+    LEVEL2(101, 500),
+    LEVEL3(501, 1000);
+
+    private final int min;
+    private final int max;
+
+    GameLevel(int min, int max) {
+        this.min = min;
+        this.max = max;
+    }
+
+    public int getMin() { return min; }
+    public int getMax() { return max; }
+    public String getDisplay() { return min + "-" + max; }
+}
+
+class QuestionGenerator {
+    private final Random random = new Random();
+    private int num1;
+    private int num2;
+    private String operator = "+";
+    private int correctAnswer;
+
+    public void generateQuestion(String operator, GameLevel level) {
+        this.operator = operator;
+        int min = level.getMin();
+        int max = level.getMax();
+
+        switch (operator) {
+            case "+":
+                num1 = rand(min, max);
+                num2 = rand(min, max);
+                correctAnswer = num1 + num2;
+                break;
+            case "-":
+                num1 = rand(min, max);
+                num2 = rand(min, max);
+                // ensure non-negative differences most of the time
+                if (num2 > num1) { int t = num1; num1 = num2; num2 = t; }
+                correctAnswer = num1 - num2;
+                break;
+            case "*":
+                num1 = rand(min, max);
+                num2 = rand(min, max);
+                correctAnswer = num1 * num2;
+                break;
+            case "/":
+                // Ensure integer division without remainder
+                num2 = rand(Math.max(1, min), Math.max(1, max)); // non-zero divisor
+                int quotient = rand(min, Math.max(min, max / Math.max(1, num2)));
+                if (quotient < 1) quotient = 1;
+                num1 = num2 * quotient;
+                correctAnswer = num1 / num2;
+                break;
+            case "%":
+                num2 = rand(1, Math.max(1, max)); // modulo by non-zero
+                num1 = rand(min, max);
+                correctAnswer = num1 % num2;
+                break;
+            default:
+                // Fallback to addition
+                num1 = rand(min, max);
+                num2 = rand(min, max);
+                correctAnswer = num1 + num2;
+                this.operator = "+";
+        }
+    }
+
+    private int rand(int min, int max) {
+        return random.nextInt((max - min) + 1) + min;
+    }
+
+    public int getNum1() { return num1; }
+    public int getNum2() { return num2; }
+    public String getOperator() { return operator; }
+    public int getCorrectAnswer() { return correctAnswer; }
+}
+
+public class ArithmeticGame extends JFrame implements ActionListener {
+    // --- Theme ---
+    private static final Color BG = new Color(245, 248, 252);
+    private static final Color CARD = new Color(255, 255, 255);
+    private static final Color ACCENT = new Color(53, 132, 228);
+    private static final Font TITLE_FONT = new Font("SansSerif", Font.BOLD, 28);
+    private static final Font BODY_FONT = new Font("SansSerif", Font.PLAIN, 16);
+
+    // --- OOP: Composition with QuestionGenerator and GameLevel ---
+    private final QuestionGenerator generator = new QuestionGenerator();
+    private String selectedOperation = "+"; // Default operation
+    private GameLevel selectedLevel = GameLevel.LEVEL1; // Default level
+
+    // --- GUI Components ---
+    private final JTextField answerField = new JTextField(10);
+    private final JLabel num1Label = new JLabel("0", SwingConstants.CENTER);
+    private final JLabel operatorLabel = new JLabel("+", SwingConstants.CENTER);
+    private final JLabel num2Label = new JLabel("0", SwingConstants.CENTER);
+    private final JLabel correctScoreLabel = new JLabel("0", SwingConstants.CENTER);
+    private final JLabel incorrectScoreLabel = new JLabel("0", SwingConstants.CENTER);
+    private final JButton submitButton = new JButton("SUBMIT");
+    private final ButtonGroup operationGroup = new ButtonGroup();
+    private final ButtonGroup levelGroup = new ButtonGroup();
+
+    // --- Game State ---
+    private int correctCount = 0;
+    private int incorrectCount = 0;
+
+    /**
+     * Constructor sets up the entire GUI.
+     */
+    public ArithmeticGame() {
+        // Set up the main window properties
+        installNimbusLaf();
+        setTitle("Arithmetic Game");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout(10, 10)); // Use BorderLayout for overall structure
+        getContentPane().setBackground(BG);
+
+        // 1. --- Question Panel (Top) ---
+        JPanel questionPanel = createQuestionPanel();
+        add(questionPanel, BorderLayout.NORTH);
+
+        // 2. --- Controls Panel (Center) ---
+        JPanel controlsPanel = createControlsPanel();
+        add(controlsPanel, BorderLayout.CENTER);
+
+        // 3. --- Score Panel (South) ---
+        JPanel scorePanel = createScorePanel();
+        add(scorePanel, BorderLayout.SOUTH);
+
+        // --- Final setup and initial question ---
+        setResizable(false);
+        // Add listeners
+        submitButton.addActionListener(this);
+        submitButton.setBackground(ACCENT);
+        submitButton.setForeground(Color.WHITE);
+        submitButton.setFont(new Font("SansSerif", Font.BOLD, 18));
+        submitButton.setFocusPainted(false);
+        submitButton.setBorder(BorderFactory.createEmptyBorder(12, 24, 12, 24));
+        submitButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+        // Generate the very first question
+        generateNewQuestion();
+
+        // Finalize frame
+        pack(); // Resize frame to fit contents
+        setLocationRelativeTo(null); // Center the window on the screen
+        setVisible(true);
+    }
+
+    /**
+     * Creates and returns the panel that displays the arithmetic problem.
+     */
+    private JPanel createQuestionPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(BG);
+        panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 0, 12));
+
+        JLabel header = new JLabel("Practice Your Arithmetic!", SwingConstants.CENTER);
+        header.setFont(TITLE_FONT);
+        header.setForeground(new Color(30, 41, 59));
+        panel.add(header, BorderLayout.NORTH);
+
+        // Equation row
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
+        row.setBackground(BG);
+
+        // Styling for the number labels (making them look like the squares in the image)
+        Font bigFont = new Font("SansSerif", Font.BOLD, 48);
+        Dimension labelSize = new Dimension(150, 80);
+
+        num1Label.setFont(bigFont);
+        num1Label.setPreferredSize(labelSize);
+        num1Label.setOpaque(true);
+        num1Label.setBackground(CARD);
+        num1Label.setBorder(BorderFactory.createCompoundBorder(
+            createShadowBorder(),
+            BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(203, 213, 225), 2),
+                BorderFactory.createEmptyBorder(8, 8, 8, 8))));
+
+        operatorLabel.setFont(bigFont);
+
+        num2Label.setFont(bigFont);
+        num2Label.setPreferredSize(labelSize);
+        num2Label.setOpaque(true);
+        num2Label.setBackground(CARD);
+        num2Label.setBorder(BorderFactory.createCompoundBorder(
+            createShadowBorder(),
+            BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(203, 213, 225), 2),
+                BorderFactory.createEmptyBorder(8, 8, 8, 8))));
+
+        JLabel equalsLabel = new JLabel("=", SwingConstants.CENTER);
+        equalsLabel.setFont(bigFont);
+        
+        // The answer field will represent the result box
+        answerField.setFont(bigFont);
+        answerField.setPreferredSize(labelSize);
+        answerField.setHorizontalAlignment(SwingConstants.CENTER);
+        answerField.setBorder(BorderFactory.createCompoundBorder(
+            createShadowBorder(),
+            BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(59, 130, 246), 2),
+                BorderFactory.createEmptyBorder(8, 8, 8, 8))));
+        answerField.setToolTipText("Type your answer and press Enter");
+        // Enter key submits
+        answerField.addActionListener(e -> submitButton.doClick());
+        
+        // Add components to row: N1 + N2 = [Answer] [Submit]
+        row.add(num1Label);
+        row.add(operatorLabel);
+        row.add(num2Label);
+        row.add(equalsLabel);
+        row.add(answerField);
+        row.add(submitButton);
+
+        panel.add(row, BorderLayout.CENTER);
+
+        return panel;
+    }
+    
+    /**
+     * Creates and returns the panel for operation and level selection.
+     */
+    private JPanel createControlsPanel() {
+        // Use GridLayout to organize the operations and levels side-by-side
+        JPanel panel = new JPanel(new GridLayout(1, 2, 30, 0));
+        panel.setBackground(BG);
+        panel.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 12));
+        
+        // --- Operations Sub-Panel ---
+        JPanel opPanel = new JPanel(new GridLayout(6, 1));
+        opPanel.setBackground(CARD);
+        opPanel.setBorder(BorderFactory.createCompoundBorder(
+            createShadowBorder(),
+            BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(203, 213, 225)), "OPERATIONS:")));
+        
+        String[] operations = {"+", "-", "*", "/", "%"};
+        String[] opDisplay = {"ADDITION (+)", "SUBTRACTION (-)", "MULTIPLICATION (*)", "DIVISION (/)", "MODULO (%)"};
+        
+        for (int i = 0; i < operations.length; i++) {
+            JRadioButton opButton = new JRadioButton(opDisplay[i]);
+            opButton.setActionCommand(operations[i]);
+            opButton.addActionListener(this::handleControlSelection);
+            opButton.setBackground(CARD);
+            opButton.setFont(BODY_FONT);
+            operationGroup.add(opButton);
+            opPanel.add(opButton);
+            if (operations[i].equals(selectedOperation)) {
+                opButton.setSelected(true); // Set default selection
+            }
+        }
+        
+        // --- Levels Sub-Panel ---
+        JPanel levelPanel = new JPanel(new GridLayout(6, 1));
+        levelPanel.setBackground(CARD);
+        levelPanel.setBorder(BorderFactory.createCompoundBorder(
+            createShadowBorder(),
+            BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(203, 213, 225)), "LEVEL:")));
+        
+        for (GameLevel level : GameLevel.values()) {
+            JRadioButton levelButton = new JRadioButton("LEVEL " + level.name().substring(5) + " (" + level.getDisplay() + ")");
+            levelButton.setActionCommand(level.name());
+            levelButton.addActionListener(this::handleControlSelection);
+            levelButton.setBackground(CARD);
+            levelButton.setFont(BODY_FONT);
+            levelGroup.add(levelButton);
+            levelPanel.add(levelButton);
+            if (level.name().equals(selectedLevel.name())) {
+                levelButton.setSelected(true); // Set default selection
+            }
+        }
+
+        panel.add(opPanel);
+        panel.add(levelPanel);
+        return panel;
+    }
+    
+    /**
+     * Creates and returns the panel for score tracking.
+     */
+    private JPanel createScorePanel() {
+        JPanel panel = new JPanel(new GridLayout(2, 2, 10, 5));
+        panel.setBackground(BG);
+        panel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createEmptyBorder(0, 12, 12, 12),
+            BorderFactory.createCompoundBorder(
+                createShadowBorder(),
+                BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(203, 213, 225)), "SCORE:"))));
+
+        // Score Labels
+        JLabel correctTitle = new JLabel("CORRECT", SwingConstants.CENTER);
+        JLabel incorrectTitle = new JLabel("INCORRECT", SwingConstants.CENTER);
+
+        correctScoreLabel.setFont(new Font("SansSerif", Font.BOLD, 24));
+        correctScoreLabel.setForeground(new Color(0, 150, 0)); // Green for correct
+        correctScoreLabel.setOpaque(true);
+        correctScoreLabel.setBackground(CARD);
+        correctScoreLabel.setBorder(BorderFactory.createCompoundBorder(createShadowBorder(), BorderFactory.createLineBorder(new Color(187, 247, 208))));        
+
+        incorrectScoreLabel.setFont(new Font("SansSerif", Font.BOLD, 24));
+        incorrectScoreLabel.setForeground(new Color(200, 0, 0)); // Red for incorrect
+        incorrectScoreLabel.setOpaque(true);
+        incorrectScoreLabel.setBackground(CARD);
+        incorrectScoreLabel.setBorder(BorderFactory.createCompoundBorder(createShadowBorder(), BorderFactory.createLineBorder(new Color(254, 202, 202))));
+
+        panel.add(correctTitle);
+        panel.add(incorrectTitle);
+        panel.add(correctScoreLabel);
+        panel.add(incorrectScoreLabel);
+
+        return panel;
+    }
+
+    /**
+     * Handles the selection of a new operation or level.
+     * @param e The ActionEvent from the radio button.
+     */
+    private void handleControlSelection(ActionEvent e) {
+        String command = e.getActionCommand();
+        // Check if the command matches an operation symbol
+        if (command.equals("+") || command.equals("-") || command.equals("*") || command.equals("/") || command.equals("%")) {
+            selectedOperation = command;
+            operatorLabel.setText(selectedOperation);
+        } 
+        // Otherwise, it must be a level
+        else {
+            try {
+                selectedLevel = GameLevel.valueOf(command);
+            } catch (IllegalArgumentException ex) {
+                System.err.println("Invalid GameLevel command: " + command);
+            }
+        }
+        
+        // Generate a new question whenever the settings change
+        generateNewQuestion();
+    }
+
+    /**
+     * Generates a new problem and updates the display labels.
+     */
+    private void generateNewQuestion() {
+        generator.generateQuestion(selectedOperation, selectedLevel);
+        
+        num1Label.setText(String.valueOf(generator.getNum1()));
+        num2Label.setText(String.valueOf(generator.getNum2()));
+        operatorLabel.setText(generator.getOperator());
+        answerField.setText(""); // Clear the answer field
+        answerField.requestFocusInWindow(); // Put cursor back in answer field
+    }
+
+    /**
+     * Updates the score and the display labels.
+     */
+    private void updateScore(boolean isCorrect) {
+        if (isCorrect) {
+            correctCount++;
+            correctScoreLabel.setText(String.valueOf(correctCount));
+        } else {
+            incorrectCount++;
+            incorrectScoreLabel.setText(String.valueOf(incorrectCount));
+        }
+    }
+
+    /**
+     * Handles the action when the Submit button is pressed.
+     * @param e The ActionEvent.
+     */
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        if (e.getSource() == submitButton) {
+            checkAnswer();
+        }
+    }
+
+    /**
+     * Checks the user's input against the correct answer.
+     */
+    private void checkAnswer() {
+        try {
+            String raw = answerField.getText().trim();
+            int correctAnswer = generator.getCorrectAnswer();
+
+            boolean hasDecimal = raw.contains(".");
+            boolean decimalIsZeroOnly = raw.matches("-?\\d+\\.0+");
+            boolean isCorrect;
+            if (hasDecimal && !decimalIsZeroOnly) {
+                // Any decimal value other than .0/.00/... is considered wrong
+                isCorrect = false;
+            } else {
+                // Accept integers or values like 2.0/2.00 as the integer 2
+                int userAnswer;
+                if (hasDecimal) {
+                    userAnswer = Integer.parseInt(raw.substring(0, raw.indexOf('.')));
+                } else {
+                    userAnswer = Integer.parseInt(raw);
+                }
+                isCorrect = (userAnswer == correctAnswer);
+            }
+            
+            String feedbackMessage = isCorrect 
+                ? "Correct! Well done!"
+                : "Incorrect. The correct answer is " + correctAnswer + ".";
+            
+            // Show feedback (using JOptionPane as an easy message box)
+            JOptionPane.showMessageDialog(this, feedbackMessage, "Result", 
+                isCorrect ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.ERROR_MESSAGE);
+
+            updateScore(isCorrect);
+            // Immediately proceed to a new question regardless of correctness
+            generateNewQuestion();
+
+        } catch (NumberFormatException ex) {
+            // Handle case where user inputs non-numeric data
+            JOptionPane.showMessageDialog(this, "Please enter a valid whole number.", "Input Error", JOptionPane.WARNING_MESSAGE);
+            answerField.requestFocusInWindow();
+        }
+    }
+
+    /**
+     * Main method to run the application.
+     */
+    public static void main(String[] args) {
+        // Use SwingUtilities.invokeLater to ensure thread safety for GUI creation
+        SwingUtilities.invokeLater(() -> new ArithmeticGame());
+    }
+
+    private static void installNimbusLaf() {
+        try {
+            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
+                if ("Nimbus".equals(info.getName())) {
+                    UIManager.setLookAndFeel(info.getClassName());
+                    break;
+                }
+            }
+        } catch (Exception ignore) { /* keep default */ }
+    }
+
+    // Simple drop-shadow using matte borders on bottom and right
+    private static Border createShadowBorder() {
+        Color shadow = new Color(0, 0, 0, 28); // subtle transparent shadow
+        return BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(0, 0, 6, 6, shadow),
+            BorderFactory.createMatteBorder(0, 0, 0, 0, new Color(0,0,0,0))
+        );
+    }
+}
+    
